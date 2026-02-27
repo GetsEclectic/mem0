@@ -186,3 +186,5 @@ eval/
 qdrant_storage/
 .crossnote
 testing.ipynb
+mem0-ts/*.tgz
+mem0-ts/package-lock.json

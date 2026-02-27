@@ -46,19 +46,36 @@ export class AnthropicLLM implements LLM {
     const systemMessage = messages.find((msg) => msg.role === "system");
     const otherMessages = messages.filter((msg) => msg.role !== "system");
 
-    const response = await this.client.messages.create({
-      model: this.model,
-      messages: otherMessages.map((msg) => ({
+    // Handle JSON mode - Anthropic doesn't have native JSON mode like OpenAI,
+    // so we enforce it via system prompt modification
+    const wantsJson = responseFormat?.type === "json_object";
+    let systemContent =
+      typeof systemMessage?.content === "string"
+        ? systemMessage.content
+        : undefined;
+
+    if (wantsJson) {
+      const jsonInstruction =
+        "\n\nCRITICAL: Respond with valid JSON only. No markdown, no code blocks, no backticks, no explanation - output ONLY the raw JSON object starting with { and ending with }.";
+      systemContent = systemContent
+        ? systemContent + jsonInstruction
+        : jsonInstruction.trim();
+    }
+
+    // Build messages array
+    const apiMessages: Array<{ role: "user" | "assistant"; content: string }> =
+      otherMessages.map((msg) => ({
         role: msg.role as "user" | "assistant",
         content:
           typeof msg.content === "string"
             ? msg.content
             : msg.content.image_url.url,
-      })),
-      system:
-        typeof systemMessage?.content === "string"
-          ? systemMessage.content
-          : undefined,
+      }));
+
+    const response = await this.client.messages.create({
+      model: this.model,
+      messages: apiMessages,
+      system: systemContent,
       max_tokens: 4096,
     });
 
