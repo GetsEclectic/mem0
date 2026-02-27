@@ -2,6 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
 
+// Required beta headers for Anthropic OAuth tokens to work.
+// Without these, Anthropic returns 401 "OAuth authentication is currently not supported."
+// See: https://github.com/anthropics/claude-code/blob/main/src/agents/pi-embedded-runner/extra-params.ts
+const OAUTH_REQUIRED_BETAS = ["oauth-2025-04-20", "claude-code-20250219"].join(
+  ",",
+);
+
 export class AnthropicLLM implements LLM {
   private client: Anthropic;
   private model: string;
@@ -17,9 +24,17 @@ export class AnthropicLLM implements LLM {
     }
 
     // Prefer authToken if provided (OAuth tokens require Bearer header)
-    this.client = authToken
-      ? new Anthropic({ authToken })
-      : new Anthropic({ apiKey });
+    // OAuth tokens also require specific beta headers to be accepted
+    if (authToken) {
+      this.client = new Anthropic({
+        authToken,
+        defaultHeaders: {
+          "anthropic-beta": OAUTH_REQUIRED_BETAS,
+        },
+      });
+    } else {
+      this.client = new Anthropic({ apiKey });
+    }
     this.model = config.model || "claude-3-sonnet-20240229";
   }
 
