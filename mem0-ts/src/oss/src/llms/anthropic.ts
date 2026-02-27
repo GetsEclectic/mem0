@@ -7,11 +7,19 @@ export class AnthropicLLM implements LLM {
   private model: string;
 
   constructor(config: LLMConfig) {
+    // Support both OAuth tokens (authToken) and API keys (apiKey)
+    // OAuth tokens use Authorization: Bearer header, API keys use X-Api-Key header
+    const authToken = config.authToken || process.env.ANTHROPIC_AUTH_TOKEN;
     const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error("Anthropic API key is required");
+
+    if (!authToken && !apiKey) {
+      throw new Error("Anthropic API key or auth token is required");
     }
-    this.client = new Anthropic({ apiKey });
+
+    // Prefer authToken if provided (OAuth tokens require Bearer header)
+    this.client = authToken
+      ? new Anthropic({ authToken })
+      : new Anthropic({ apiKey });
     this.model = config.model || "claude-3-sonnet-20240229";
   }
 

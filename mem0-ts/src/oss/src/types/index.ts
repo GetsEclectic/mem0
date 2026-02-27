@@ -43,6 +43,7 @@ export interface LLMConfig {
   baseURL?: string;
   config?: Record<string, any>;
   apiKey?: string;
+  authToken?: string; // OAuth token (uses Authorization: Bearer header)
   model?: string | any;
   modelProperties?: Record<string, any>;
 }
@@ -137,6 +138,7 @@ export const MemoryConfigSchema = z.object({
     provider: z.string(),
     config: z.object({
       apiKey: z.string().optional(),
+      authToken: z.string().optional(), // OAuth token (uses Authorization: Bearer header)
       model: z.union([z.string(), z.any()]).optional(),
       modelProperties: z.record(z.string(), z.any()).optional(),
       baseURL: z.string().optional(),
