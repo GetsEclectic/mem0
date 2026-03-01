@@ -23,6 +23,7 @@ class AnthropicConfig(BaseLlmConfig):
         http_client_proxies: Optional[dict] = None,
         # Anthropic-specific parameters
         anthropic_base_url: Optional[str] = None,
+        auth_token: Optional[str] = None,
     ):
         """
         Initialize Anthropic configuration.
@@ -38,6 +39,7 @@ class AnthropicConfig(BaseLlmConfig):
             vision_details: Vision detail level, defaults to "auto"
             http_client_proxies: HTTP client proxy settings, defaults to None
             anthropic_base_url: Anthropic API base URL, defaults to None
+            auth_token: Anthropic OAuth token (Authorization: Bearer), defaults to None
         """
         # Initialize base parameters
         super().__init__(
@@ -54,3 +56,4 @@ class AnthropicConfig(BaseLlmConfig):
 
         # Anthropic-specific parameters
         self.anthropic_base_url = anthropic_base_url
+        self.auth_token = auth_token

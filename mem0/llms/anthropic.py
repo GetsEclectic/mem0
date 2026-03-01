@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Dict, List, Optional, Union
 
@@ -38,7 +39,58 @@ class AnthropicLLM(LLMBase):
             self.config.model = "claude-3-5-sonnet-20240620"
 
         api_key = self.config.api_key or os.getenv("ANTHROPIC_API_KEY")
-        self.client = anthropic.Anthropic(api_key=api_key)
+        auth_token = self.config.auth_token or os.getenv("ANTHROPIC_AUTH_TOKEN")
+
+        # Auto-detect OAuth tokens passed as api_key
+        if api_key and api_key.startswith("sk-ant-oat") and not auth_token:
+            auth_token = api_key
+            api_key = None
+
+        self._is_oauth = bool(auth_token)
+
+        client_kwargs = {}
+        if api_key:
+            client_kwargs["api_key"] = api_key
+        if auth_token:
+            client_kwargs["auth_token"] = auth_token
+        if self.config.anthropic_base_url:
+            client_kwargs["base_url"] = self.config.anthropic_base_url
+
+        # OAuth tokens require specific beta headers to be accepted
+        if self._is_oauth:
+            client_kwargs["default_headers"] = {
+                "anthropic-beta": "oauth-2025-04-20,interleaved-thinking-2025-05-14",
+            }
+
+        self.client = anthropic.Anthropic(**client_kwargs)
+
+    @staticmethod
+    def _convert_tool(tool: Dict) -> Dict:
+        """Convert OpenAI-format tool to Anthropic format."""
+        if tool.get("type") == "function" and "function" in tool:
+            func = tool["function"]
+            return {
+                "name": func["name"],
+                "description": func.get("description", ""),
+                "input_schema": func.get("parameters", {"type": "object", "properties": {}}),
+            }
+        # Already in Anthropic format or unknown format, pass through
+        return tool
+
+    def _parse_response(self, response, tools):
+        """Parse Anthropic response, converting tool_use blocks to mem0's expected format."""
+        if tools:
+            processed = {"content": None, "tool_calls": []}
+            for block in response.content:
+                if block.type == "text":
+                    processed["content"] = block.text
+                elif block.type == "tool_use":
+                    processed["tool_calls"].append({
+                        "name": block.name,
+                        "arguments": block.input if isinstance(block.input, dict) else json.loads(block.input),
+                    })
+            return processed
+        return response.content[0].text
 
     def generate_response(
         self,
@@ -71,6 +123,9 @@ class AnthropicLLM(LLMBase):
                 filtered_messages.append(message)
 
         params = self._get_supported_params(messages=messages, **kwargs)
+        # Anthropic doesn't allow both temperature and top_p
+        if "temperature" in params and "top_p" in params:
+            del params["top_p"]
         params.update(
             {
                 "model": self.config.model,
@@ -80,8 +135,12 @@ class AnthropicLLM(LLMBase):
         )
 
         if tools:  # TODO: Remove tools if no issues found with new memory addition logic
-            params["tools"] = tools
-            params["tool_choice"] = tool_choice
+            params["tools"] = [self._convert_tool(t) for t in tools]
+            # Anthropic API expects tool_choice as a dict, e.g. {"type": "auto"}
+            if isinstance(tool_choice, str):
+                params["tool_choice"] = {"type": tool_choice}
+            else:
+                params["tool_choice"] = tool_choice
 
         response = self.client.messages.create(**params)
-        return response.content[0].text
+        return self._parse_response(response, tools)
