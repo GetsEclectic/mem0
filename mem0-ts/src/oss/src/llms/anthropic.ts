@@ -16,17 +16,26 @@ export class AnthropicLLM implements LLM {
   constructor(config: LLMConfig) {
     // Support both OAuth tokens (authToken) and API keys (apiKey)
     // OAuth tokens use Authorization: Bearer header, API keys use X-Api-Key header
-    const authToken = config.authToken || process.env.ANTHROPIC_AUTH_TOKEN;
-    const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY;
+    let authToken = config.authToken || process.env.ANTHROPIC_AUTH_TOKEN;
+    let apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY;
+
+    // Auto-detect OAuth tokens passed as apiKey
+    if (apiKey && apiKey.startsWith("sk-ant-oat") && !authToken) {
+      authToken = apiKey;
+      apiKey = undefined;
+    }
 
     if (!authToken && !apiKey) {
       throw new Error("Anthropic API key or auth token is required");
     }
 
     // Prefer authToken if provided (OAuth tokens require Bearer header)
-    // OAuth tokens also require specific beta headers to be accepted
+    // OAuth tokens also require specific beta headers to be accepted.
+    // When using authToken, explicitly set apiKey to null to prevent the SDK
+    // from auto-reading ANTHROPIC_API_KEY env var and sending both headers.
     if (authToken) {
       this.client = new Anthropic({
+        apiKey: null,
         authToken,
         defaultHeaders: {
           "anthropic-beta": OAUTH_REQUIRED_BETAS,
